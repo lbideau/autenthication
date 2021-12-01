@@ -1,48 +1,64 @@
-import React, { useState, useEffect } from "react";
-import getState from "./flux.js";
+import React, { createContext, useEffect, useState } from "react";
+import PropTypes from "prop-types";
 
-// Don't change, here is where we initialize our context, by default it's just going to be null.
-export const Context = React.createContext(null);
+export const AppContext = createContext(undefined);
 
-// This function injects the global store to any view/component where you want to use it, we will inject the context to layout.js, you can see it here:
-// https://github.com/4GeeksAcademy/react-hello-webapp/blob/master/src/js/layout.js#L35
-const injectContext = PassedComponent => {
-	const StoreWrapper = props => {
-		//this will be passed as the contenxt value
-		const [state, setState] = useState(
-			getState({
-				getStore: () => state.store,
-				getActions: () => state.actions,
-				setStore: updatedStore =>
-					setState({
-						store: Object.assign(state.store, updatedStore),
-						actions: { ...state.actions }
-					})
-			})
-		);
+const AppContextProvider = ({ children }) => {
+	const [store, setStore] = useState({
+		favorites: [],
+		token: undefined
+	});
 
-		useEffect(() => {
-			/**
-			 * EDIT THIS!
-			 * This function is the equivalent to "window.onLoad", it only runs once on the entire application lifetime
-			 * you should do your ajax requests or fetch api requests here. Do not use setState() to save data in the
-			 * store, instead use actions, like this:
-			 *
-			 * state.actions.loadSomeData(); <---- calling this function from the flux.js actions
-			 *
-			 **/
-		}, []);
+	const actions = {
+		getFavorites: async token => {
+			const response = await fetch("http://127.0.0.1:3010/favorites", {
+				method: "GET",
+				headers: { Authorization: "Bearer " + token }
+			});
+			const body = await response.json();
+			if (response.ok) {
+				setStore(prev => ({ ...prev, favorites: body }));
+			}
+		},
+		addToFavorite: async (_name, _url, _isFav, _nature, uid) => {
+			const response = await fetch("http://127.0.0.1:3010/favorites/" + _nature, {
+				method: "POST",
+				headers: { Authorization: "Bearer " + store.token, "Content-Type": "application/json" },
+				body: JSON.stringify({ name: _name, uid: uid })
+			});
+			if (response.ok) {
+				return true;
+			}
+			return false;
+		},
 
-		// The initial value for the context is not null anymore, but the current state of this component,
-		// the context will now have a getStore, getActions and setStore functions available, because they were declared
-		// on the state of this component
-		return (
-			<Context.Provider value={state}>
-				<PassedComponent {...props} />
-			</Context.Provider>
-		);
+		removeFavorite: async (index, id) => {
+			const response = await fetch(`http://127.0.0.1:3010/favorites/${id}`, {
+				method: "DELETE"
+			});
+			if (response.status == 204) {
+				alert("Favorite deleted");
+			}
+			const newFav = store.favorites.filter((fav, i) => i !== index);
+			setStore(prev => ({ ...prev, favorites: newFav }));
+		},
+
+		setToken: token => {
+			localStorage.setItem("token", token);
+			setStore(prev => ({ ...prev, token: token }));
+		}
 	};
-	return StoreWrapper;
+	const context = { store, actions };
+
+	useEffect(() => {
+		console.log(store.favorites);
+	});
+
+	return <AppContext.Provider value={context}>{children}</AppContext.Provider>;
 };
 
-export default injectContext;
+AppContextProvider.propTypes = {
+	children: PropTypes.node
+};
+
+export default AppContextProvider;
